@@ -5,11 +5,12 @@ import { setState, state } from './state.js';
 const viewer = new Viewer(document.getElementById('canvas-host'));
 window.__viewer = viewer;
 
+let lastMesh = null;
 let backendPromise = null;
 
-// Try to load the backend once. If it fails (static hosting, missing
-// dependencies), resolve to null and let the UI fall back to local
-// Three.js loaders.
+// Load the backend once, cache the result. Returns null if unavailable.
+// Static hosting (like GitHub Pages without a build step) will fail here,
+// which is fine — the frontend still works via the local Three.js loaders.
 function loadBackend() {
   if (!backendPromise) {
     backendPromise = import('./pipeline.js')
@@ -31,27 +32,30 @@ async function handleFile(file) {
   if (backend) {
     try {
       const buffer = await file.arrayBuffer();
-      const { mesh } = await backend.processModel(buffer, state.settings, (stage, pct, data) => {
-        console.debug(`[pipeline] ${stage}: ${Math.round(pct * 100)}%`, data ?? '');
-      });
+      const { mesh } = await backend.processModel(
+        buffer,
+        state.settings,
+        (stage, pct, data) => {
+          console.debug(`[pipeline] ${stage}: ${Math.round(pct * 100)}%`, data ?? '');
+        },
+      );
+      lastMesh = mesh;
       viewer.loadMeshData(mesh);
       setState({ modelLoaded: true, stage: 'validate' });
       return;
     } catch (err) {
       console.error('[main] Pipeline failed, falling back to raw load:', err);
-      // fall through to Path B
     }
   }
 
   // Path B: no backend — load the file directly with Three.js loaders.
-  // This is what the original prototype did, and it works in any browser.
   try {
     await viewer.loadFile(file);
     setState({ modelLoaded: true, stage: 'fit' });
     if (!backend) {
       console.info(
-        '[main] Loaded with local Three.js loaders. ' +
-        'Shelling, hole cutting, and STL export require the Vite build.',
+        '[main] Loaded with local Three.js loaders. Shelling, hole ' +
+        'cutting, and STL export require the bundled build.',
       );
     }
   } catch (err) {
@@ -64,17 +68,18 @@ async function handleExport() {
   const backend = await loadBackend();
   if (!backend) {
     alert(
-      'STL export requires the geometry backend.\n\n' +
-      'Run the project through Vite to enable it:\n' +
-      '  npm install\n' +
-      '  npm run dev',
+      'STL export requires the geometry backend, which is not ' +
+      'available in this deployment.\n\n' +
+      'The frontend is running in preview mode.',
     );
     return;
   }
+  if (!lastMesh) {
+    alert('No processed mesh to export yet. Load a model first.');
+    return;
+  }
   try {
-    const mesh = viewer.getMeshData();
-    if (!mesh) { alert('No processed mesh to export yet.'); return; }
-    await backend.exportModel(mesh);
+    await backend.exportModel(lastMesh);
   } catch (err) {
     console.error(err);
     alert(`Export failed: ${err.message}`);

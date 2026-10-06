@@ -2,6 +2,13 @@ import { STAGES, PRESETS, state, setState, setSetting, subscribe } from './state
 import { computeEstimate, validate, MATERIAL_DENSITY } from './estimate.js';
 
 export function initUI({ viewer, onFile, onExport }) {
+  // Guard: if the viewer failed to construct, skip the whole thing
+  // rather than throwing a chain of null-reference errors.
+  if (!viewer) {
+    console.error('[ui] No viewer instance — UI disabled.');
+    return;
+  }
+
   const el = {
     timeline: document.getElementById('timeline'),
     presets: document.getElementById('presets'),
@@ -28,6 +35,14 @@ export function initUI({ viewer, onFile, onExport }) {
     sectionOffset: document.getElementById('section-offset'),
     sectionOut: document.getElementById('section-out'),
   };
+  // Verify every DOM node we depend on actually exists.
+  const missing = Object.entries(el)
+    .filter(([, node]) => !node)
+    .map(([key]) => key);
+  if (missing.length) {
+    console.error('[ui] Missing DOM nodes:', missing.join(', '));
+    // Continue anyway — the remaining listeners still bind.
+  }
 
   // --- Timeline ---
   el.timeline.innerHTML = '';

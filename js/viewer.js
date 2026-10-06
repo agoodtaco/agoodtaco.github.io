@@ -291,9 +291,8 @@ export class Viewer {
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(() => this._animate());
   }
-
     // ------------------------------------------------------------------
-  // Backend integration
+  // Backend integration — bridge between worker output and the scene.
   // ------------------------------------------------------------------
 
   // Accept { positions: Float32Array, indices: Uint32Array } from the
@@ -325,12 +324,14 @@ export class Viewer {
     if (!target) return null;
 
     let geometry = null;
-    target.traverse(o => { if (o.isMesh && !geometry) geometry = o.geometry; });
+    target.traverse(o => {
+      if (o.isMesh && !geometry) geometry = o.geometry;
+    });
     if (!geometry) return null;
 
     const pos = geometry.getAttribute('position');
     const idx = geometry.index;
-    if (!idx) return null;
+    if (!idx || !pos) return null;
 
     return {
       positions: new Float32Array(pos.array),
